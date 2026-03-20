@@ -181,19 +181,28 @@ int ConfigParser::readXmlFile(std::string const &filePath)
 
   std::ifstream ifs{filePath};
   PRECICE_CHECK(ifs, "XML parser was unable to open configuration file \"{}\"", filePath);
+_filePath = filePath;
+std::string content{std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>()};
 
-  std::string content{std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>()};
+// GSoC #751: save lines for location context display
+std::istringstream contentStream(content);
+std::string        singleLine;
+while (std::getline(contentStream, singleLine)) {
+  _fileLines.push_back(singleLine);
+}
 
   PRECICE_CHECK(!content.empty(), "The configuration file \"{}\" is empty.", filePath);
 
   _hash = utils::preciceHash(content);
 
-  xmlParserCtxtPtr ctxt = xmlCreatePushParserCtxt(&SAXHandler, static_cast<void *>(this),
-                                                  content.c_str(), content.size(), nullptr);
+// GSoC #751: store as member so OnStartElement can read location
+_parserContext = xmlCreatePushParserCtxt(&SAXHandler, static_cast<void *>(this),
+                                         content.c_str(), content.size(), nullptr);
 
-  xmlParseChunk(ctxt, nullptr, 0, 1);
-  xmlFreeParserCtxt(ctxt);
-  xmlCleanupParser();
+xmlParseChunk(_parserContext, nullptr, 0, 1);
+xmlFreeParserCtxt(_parserContext);
+_parserContext = nullptr; // reset — context invalid after parsing
+xmlCleanupParser();
 
   return 0;
 }
@@ -284,6 +293,13 @@ void ConfigParser::OnStartElement(
   pTag->m_Prefix      = prefix;
   pTag->m_Name        = localname;
   pTag->m_aAttributes = std::move(attributes);
+
+  // GSoC #751: capture location while parser context is valid
+  if (_parserContext != nullptr) {
+    pTag->m_Line   = xmlSAX2GetLineNumber(_parserContext);
+    pTag->m_Column = xmlSAX2GetColumnNumber(_parserContext);
+    pTag->m_File   = _filePath;
+  }
 
   if (not m_CurrentTags.empty()) {
     auto pParentTag = m_CurrentTags.back();

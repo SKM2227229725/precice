@@ -1,5 +1,6 @@
 #pragma once
 
+#include <libxml/parser.h>
 #include <map>
 #include <memory>
 #include <string>
@@ -26,6 +27,10 @@ public:
     std::string m_Name;
     std::string m_Prefix;
     bool        m_Used = false;
+      // GSoC #751: location info captured during SAX parsing
+  int         m_Line   = 0;
+  int         m_Column = 0;
+  std::string m_File;
 
     using AttributePair = std::map<std::string, std::string>;
     AttributePair                      m_aAttributes;
@@ -44,6 +49,10 @@ private:
   CTagPtrVec m_CurrentTags;
 
   std::shared_ptr<precice::xml::XMLTag> m_pXmlTag;
+  // GSoC #751: parser context and source file data for XML location extraction
+xmlParserCtxtPtr         _parserContext = nullptr;
+std::string              _filePath;
+std::vector<std::string> _fileLines;
 
 public:
   /// Parser ctor for Callback init
